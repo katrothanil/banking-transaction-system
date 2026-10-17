@@ -1,0 +1,9 @@
+# Tests use a separate database so they never wipe your development data.
+# docker-compose creates it automatically (see docker/init-test-db.sql).
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/banking_test}
+    username: ${DB_USERNAME:banking}
+    password: ${DB_PASSWORD:banking}
+    hikari:
+      maximum-pool-size: 30

@@ -1,0 +1,62 @@
+### Banking Transaction System - sample requests
+### Open in IntelliJ IDEA or VS Code (REST Client extension) and click "Send Request".
+
+@base = http://localhost:8080/api
+
+### 1. Create a customer
+POST {{base}}/customers
+Content-Type: application/json
+
+{ "fullName": "Anil Katroth", "email": "anil@example.com", "phone": "9652336856" }
+
+### 2. Open a savings account (note the accountNumber in the response, e.g. 100000000001)
+POST {{base}}/accounts
+Content-Type: application/json
+
+{ "customerId": 1, "accountType": "SAVINGS" }
+
+### 3. Open a second account (e.g. 100000000002)
+POST {{base}}/accounts
+Content-Type: application/json
+
+{ "customerId": 1, "accountType": "CURRENT" }
+
+### 4. Deposit
+POST {{base}}/accounts/100000000001/deposit
+Content-Type: application/json
+
+{ "amount": 5000.00, "description": "Salary" }
+
+### 5. Transfer (send this twice: the second call returns the same result, money moves once)
+POST {{base}}/transfers
+Content-Type: application/json
+
+{ "fromAccountNumber": "100000000001", "toAccountNumber": "100000000002",
+  "amount": 1200.00, "referenceNo": "RENT-OCT-2026", "description": "October rent" }
+
+### 6. Withdraw more than the balance -> 422 Insufficient funds
+POST {{base}}/accounts/100000000002/withdraw
+Content-Type: application/json
+
+{ "amount": 99999.00 }
+
+### 7. Account details
+GET {{base}}/accounts/100000000001
+
+### 8. Statement for a date range
+GET {{base}}/accounts/100000000001/statement?from=2026-10-01&to=2026-10-31
+
+### 9. Monthly summary (from the database view)
+GET {{base}}/accounts/100000000001/summary
+
+### 10. Look up a transaction by reference
+GET {{base}}/transactions/RENT-OCT-2026
+
+### 11. Freeze an account (transfers to/from it are then rejected)
+PATCH {{base}}/accounts/100000000002/status
+Content-Type: application/json
+
+{ "status": "FROZEN" }
+
+### 12. All accounts of a customer
+GET {{base}}/customers/1/accounts

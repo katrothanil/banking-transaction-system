@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: banking-transaction-system
+
+  datasource:
+    # Override with environment variables (DB_URL, DB_USERNAME, DB_PASSWORD) when needed
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/banking}
+    username: ${DB_USERNAME:banking}
+    password: ${DB_PASSWORD:banking}
+    hikari:
+      maximum-pool-size: 20
+
+  jpa:
+    # Schema is owned by Flyway migrations; Hibernate only validates it matches the entities
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    com.anil.banking: INFO
