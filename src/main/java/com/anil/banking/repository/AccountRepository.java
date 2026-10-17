@@ -27,4 +27,13 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     @Query(value = "SELECT nextval('account_number_seq')", nativeQuery = true)
     Long nextAccountNumber();
+
+    /** Customer id of the account's owner; used by AccessGuard for ownership checks. */
+    @Query("SELECT a.customer.id FROM Account a WHERE a.accountNumber = :accountNumber")
+    Optional<Long> findOwnerCustomerId(@Param("accountNumber") String accountNumber);
+
+    @Query("SELECT SUM(a.balance) FROM Account a")
+    java.math.BigDecimal totalBalance();
+
+    long countByStatus(com.anil.banking.entity.AccountStatus status);
 }

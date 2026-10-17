@@ -1,62 +1,85 @@
 ### Banking Transaction System - sample requests
 ### Open in IntelliJ IDEA or VS Code (REST Client extension) and click "Send Request".
+### Run 1 (or 2), copy the "token" from the response into @token below, then run the rest.
 
 @base = http://localhost:8080/api
+@token = paste-token-here
 
-### 1. Create a customer
-POST {{base}}/customers
+### 1. Sign up as a customer (also opens a savings account and returns a token)
+POST {{base}}/auth/register
 Content-Type: application/json
 
-{ "fullName": "Anil Katroth", "email": "anil@example.com", "phone": "9652336856" }
+{ "fullName": "Anil Katroth", "email": "anil@example.com", "phone": "9652336856",
+  "username": "anil", "password": "Secret123" }
 
-### 2. Open a savings account (note the accountNumber in the response, e.g. 100000000001)
-POST {{base}}/accounts
+### 2. Log in
+POST {{base}}/auth/login
 Content-Type: application/json
 
-{ "customerId": 1, "accountType": "SAVINGS" }
+{ "username": "anil", "password": "Secret123" }
 
-### 3. Open a second account (e.g. 100000000002)
-POST {{base}}/accounts
+### 3. My profile and accounts (note your accountNumber, e.g. 100000000001)
+GET {{base}}/auth/me
+Authorization: Bearer {{token}}
+
+### 4. Open a second (current) account
+POST {{base}}/me/accounts
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "customerId": 1, "accountType": "CURRENT" }
+{ "accountType": "CURRENT" }
 
-### 4. Deposit
+### 5. Deposit
 POST {{base}}/accounts/100000000001/deposit
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "amount": 5000.00, "description": "Salary" }
 
-### 5. Transfer (send this twice: the second call returns the same result, money moves once)
+### 6. Check who owns the receiving account before sending
+GET {{base}}/accounts/100000000002/holder
+Authorization: Bearer {{token}}
+
+### 7. Transfer (send twice: the second call returns the same result, money moves once)
 POST {{base}}/transfers
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "fromAccountNumber": "100000000001", "toAccountNumber": "100000000002",
   "amount": 1200.00, "referenceNo": "RENT-OCT-2026", "description": "October rent" }
 
-### 6. Withdraw more than the balance -> 422 Insufficient funds
+### 8. Withdraw more than the balance -> 422 Insufficient funds
 POST {{base}}/accounts/100000000002/withdraw
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "amount": 99999.00 }
 
-### 7. Account details
-GET {{base}}/accounts/100000000001
+### 9. Recent activity
+GET {{base}}/accounts/100000000001/transactions?limit=10
+Authorization: Bearer {{token}}
 
-### 8. Statement for a date range
+### 10. Statement for a date range
 GET {{base}}/accounts/100000000001/statement?from=2026-10-01&to=2026-10-31
+Authorization: Bearer {{token}}
 
-### 9. Monthly summary (from the database view)
-GET {{base}}/accounts/100000000001/summary
+### 11. Admin: log in, then put this token in @token to call the admin endpoints
+POST {{base}}/auth/login
+Content-Type: application/json
 
-### 10. Look up a transaction by reference
-GET {{base}}/transactions/RENT-OCT-2026
+{ "username": "admin", "password": "Admin@123" }
 
-### 11. Freeze an account (transfers to/from it are then rejected)
+### 12. Admin: totals
+GET {{base}}/admin/stats
+Authorization: Bearer {{token}}
+
+### 13. Admin: all customers with accounts
+GET {{base}}/admin/customers
+Authorization: Bearer {{token}}
+
+### 14. Admin: freeze an account
 PATCH {{base}}/accounts/100000000002/status
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "status": "FROZEN" }
-
-### 12. All accounts of a customer
-GET {{base}}/customers/1/accounts

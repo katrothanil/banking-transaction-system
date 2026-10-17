@@ -17,6 +17,6 @@ public class DatabaseCleaner {
     }
 
     public void clean() {
-        jdbc.execute("TRUNCATE ledger_entries, transactions, audit_log, accounts, customers RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE ledger_entries, transactions, audit_log, users, accounts, customers RESTART IDENTITY CASCADE");
     }
 }

@@ -1,11 +1,20 @@
 # Banking Transaction System
 
-A backend banking service built with **Spring Boot** and **PostgreSQL** that handles accounts, deposits,
-withdrawals and transfers **without ever losing or duplicating money**, even when hundreds of requests
-hit the same accounts at the same time.
+A full-stack banking application: a **React** web app on top of a **Spring Boot + PostgreSQL** API.
+Customers sign up, log in and manage their accounts (deposit, withdraw, transfer, statements);
+bank staff use an admin console to see every customer and freeze accounts.
 
-The focus of this project is correctness under concurrency: ACID transactions, row-level locking,
-deadlock prevention, idempotent requests, a double-entry ledger and a tamper-proof audit trail.
+Under the hood, every money movement is **ACID-safe**: row-level locking, deadlock prevention,
+idempotent requests, a double-entry ledger and a tamper-proof audit trail mean money is never lost
+or duplicated, even when hundreds of requests hit the same accounts at once.
+
+![Customer dashboard](docs/screenshots/3-dashboard.png)
+
+| Login | Send money | Admin console |
+|---|---|---|
+| ![Login](docs/screenshots/1-login.png) | ![Transfer](docs/screenshots/5-transfer-form.png) | ![Admin](docs/screenshots/9-admin.png) |
+
+More screens in [`docs/screenshots`](docs/screenshots).
 
 ---
 
@@ -24,12 +33,18 @@ deadlock prevention, idempotent requests, a double-entry ledger and a tamper-pro
 | DB-level safety net | `CHECK (balance >= 0)` - the database refuses negative balances even if the code has a bug |
 | Statements and reports | Date-range statement with opening/closing balance; monthly summary from a SQL view |
 | Account status | Freeze / unfreeze / close (closing requires zero balance) |
+| Login and sign-up | Spring Security with stateless **JWT** tokens; passwords hashed with **BCrypt** |
+| Roles | `CUSTOMER` sees only their own accounts; `ADMIN` sees everyone and can freeze or close accounts |
+| Ownership checks | Every account endpoint verifies the account belongs to the logged-in customer (403 otherwise) |
+| Web app | React pages for login, sign-up, dashboard, transfers (with review step), statements, admin console |
 
 ## Tech stack
 
-- **Java 17**, **Spring Boot 3.3** (Web, Data JPA, Validation)
+- **Java 17**, **Spring Boot 3.3** (Web, Data JPA, Validation, **Security**), **JWT** (jjwt)
+- **React 18** + **Vite** + React Router for the web app
 - **PostgreSQL 16** with **Flyway** migrations
 - **JUnit 5**, AssertJ, MockMvc - including a multi-threaded concurrency test
+- **Swagger UI** (springdoc-openapi) for interactive API docs, **pgAdmin** for browsing the database
 - **Docker** and Docker Compose
 
 ---
@@ -95,6 +110,7 @@ Schema lives in [`src/main/resources/db/migration`](src/main/resources/db/migrat
 
 - `V1__create_core_tables.sql` - tables, constraints, indexes
 - `V2__audit_trigger_and_reports.sql` - audit trigger, immutability triggers, monthly summary view
+- `V3__users_and_roles.sql` - login accounts (`users`) with roles, linked one-to-one to customers
 
 Design decisions:
 
@@ -129,47 +145,109 @@ The core logic is in [`TransactionService.java`](src/main/java/com/anil/banking/
 
 ---
 
+## Security
+
+```text
+Browser (React)                          Spring Boot
+  POST /api/auth/login  ───────────────▶  check BCrypt hash  ──▶  return signed JWT (60 min)
+  GET  /api/me/accounts                   JwtAuthenticationFilter: verify signature + expiry
+       Authorization: Bearer <JWT> ─────▶  SecurityConfig: is the route allowed for this role?
+                                           AccessGuard: does this account belong to this customer?
+```
+
+- **Passwords** are stored only as BCrypt hashes.
+- **Stateless**: no server sessions; every request carries the JWT, so CSRF protection is not needed.
+- **Roles**: `/api/admin/**`, opening accounts for others and changing account status require `ADMIN`.
+- **Ownership**: customers can read and move money only from their own accounts (403 otherwise),
+  but can send money *to* any account number, like a real bank.
+- **Login errors** use one message for "unknown user" and "wrong password", so usernames cannot be probed.
+- A default admin (`admin` / `Admin@123`) is created on first start. Override with `ADMIN_PASSWORD`, and set
+  `JWT_SECRET` (32+ characters) for any real deployment.
+
+---
+
 ## Project structure
 
 ```text
 src/main/java/com/anil/banking
-├── controller/   REST endpoints (customers, accounts, transfers)
+├── controller/   REST endpoints (auth, me, accounts, transfers, admin)
 ├── service/      business logic and transaction boundaries
+├── security/     JWT service and filter, Spring Security config, ownership guard
 ├── repository/   Spring Data JPA repositories (incl. locking query)
 ├── entity/       JPA entities and enums
 ├── dto/          request/response records with validation
+├── config/       Swagger setup, admin user seeding
 └── exception/    custom exceptions + global JSON error handler
 
-src/main/resources
-├── application.yml
-└── db/migration/ Flyway SQL migrations
+src/main/resources/db/migration/   Flyway SQL migrations
+
+frontend/src
+├── pages/        Login, Register, Dashboard, Transfer, Statement, Admin
+├── components/   layout, modal, activity list, route guard
+├── api.js        fetch wrapper that attaches the JWT
+└── auth.jsx      login state (React context)
 
 src/test/java/com/anil/banking
 ├── service/TransactionServiceTest.java   business rules
 ├── service/ConcurrentTransferTest.java   400 parallel transfers, 20 threads
-└── controller/ApiTest.java               HTTP status codes and validation
+└── controller/ApiTest.java               login, JWT, roles, ownership, validation over HTTP
 ```
 
 ---
 
 ## Running the project
 
-### Option A: everything in Docker (no Java needed)
+Requirements: **Java 17+**, **Node.js 18+**, **Docker** (for PostgreSQL). Maven is optional (see below).
+
+**1. Start PostgreSQL**
 
 ```bash
-docker compose up --build
+docker compose up -d db
 ```
 
-The API is then available at `http://localhost:8080/api`.
+The database is published on host port **5433** (not 5432) so it never clashes with a PostgreSQL
+installed directly on your machine.
 
-### Option B: run locally (for development)
-
-Requirements: Java 17+, Maven 3.9+, Docker (for PostgreSQL).
+**2. Start the backend** (port 8080)
 
 ```bash
-docker compose up -d db        # start only PostgreSQL
-mvn spring-boot:run            # start the app
+mvn spring-boot:run
 ```
+
+No Maven installed? Build the jar with Docker, then run it with Java:
+
+```bash
+docker run --rm -v "$PWD:/app" -v banking-m2:/root/.m2 -w /app maven:3.9-eclipse-temurin-17 mvn -q package -DskipTests
+java -jar target/banking-transaction-system-1.0.0.jar
+```
+
+**3. Start the web app** (port 5173)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**. Sign up as a customer, or log in as the admin (`admin` / `Admin@123`).
+The Vite dev server forwards `/api` calls to the backend on port 8080.
+
+### Other tools
+
+| Tool | URL | What it is for |
+|---|---|---|
+| **Swagger UI** | http://localhost:8080/swagger-ui.html | Raw API: log in via `/api/auth/login`, click *Authorize*, paste the token |
+| **pgAdmin** | http://localhost:5050 (`admin@banking.com` / `admin`), start with `docker compose up -d pgadmin` | Watch balances, ledger rows and the audit log change |
+
+Useful queries in pgAdmin (*Tools → Query Tool*, server *Banking DB*, password `banking`):
+
+```sql
+SELECT account_number, balance, status FROM accounts ORDER BY id;
+SELECT * FROM ledger_entries ORDER BY id DESC LIMIT 20;
+SELECT record_id, action, old_data, new_data, changed_at FROM audit_log ORDER BY id DESC LIMIT 20;
+```
+
+---
 
 ## Running the tests
 
@@ -189,11 +267,6 @@ docker run --rm --network banking-transaction-system_default \
   maven:3.9-eclipse-temurin-17 mvn test
 ```
 
-```text
-Tests run: 17, Failures: 0, Errors: 0, Skipped: 0
-BUILD SUCCESS
-```
-
 > If you created the database container before `docker/init-test-db.sql` existed, run
 > `docker exec -it banking-db psql -U banking -c "CREATE DATABASE banking_test;"` once.
 
@@ -201,51 +274,38 @@ BUILD SUCCESS
 
 ## API
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/customers` | Create a customer |
-| GET | `/api/customers/{id}` | Get a customer |
-| GET | `/api/customers/{id}/accounts` | List a customer's accounts |
-| POST | `/api/accounts` | Open an account |
-| GET | `/api/accounts/{accountNumber}` | Account details and balance |
-| PATCH | `/api/accounts/{accountNumber}/status` | Freeze / unfreeze / close |
-| POST | `/api/accounts/{accountNumber}/deposit` | Deposit |
-| POST | `/api/accounts/{accountNumber}/withdraw` | Withdraw |
-| POST | `/api/transfers` | Transfer between accounts |
-| GET | `/api/transactions/{referenceNo}` | Look up a transaction |
-| GET | `/api/accounts/{accountNumber}/statement?from=YYYY-MM-DD&to=YYYY-MM-DD` | Statement |
-| GET | `/api/accounts/{accountNumber}/summary` | Monthly credit/debit summary |
+All endpoints except register and login need `Authorization: Bearer <token>`.
 
-Ready-to-run examples: [`api-requests.http`](api-requests.http) (IntelliJ / VS Code REST Client).
-
-### Example: transfer
-
-```bash
-curl -X POST http://localhost:8080/api/transfers \
-  -H "Content-Type: application/json" \
-  -d '{"fromAccountNumber":"100000000001","toAccountNumber":"100000000002",
-       "amount":1200.00,"referenceNo":"RENT-OCT-2026","description":"October rent"}'
-```
-
-```json
-{
-  "referenceNo": "RENT-OCT-2026",
-  "type": "TRANSFER",
-  "amount": 1200.00,
-  "fromAccountNumber": "100000000001",
-  "toAccountNumber": "100000000002",
-  "description": "October rent",
-  "createdAt": "2026-10-17T11:30:12.123456"
-}
-```
+| Method | Endpoint | Who | Description |
+|---|---|---|---|
+| POST | `/api/auth/register` | anyone | Sign up: customer + login + first savings account; returns a token |
+| POST | `/api/auth/login` | anyone | Log in; returns a token |
+| GET | `/api/auth/me` | logged in | Own profile and accounts |
+| GET | `/api/me/accounts` | customer | Own accounts |
+| POST | `/api/me/accounts` | customer | Open another account |
+| GET | `/api/accounts/{no}` | owner / admin | Account details and balance |
+| GET | `/api/accounts/{no}/holder` | logged in | Masked holder name, to confirm a transfer receiver |
+| POST | `/api/accounts/{no}/deposit` | owner / admin | Deposit |
+| POST | `/api/accounts/{no}/withdraw` | owner / admin | Withdraw |
+| POST | `/api/transfers` | owner of source | Transfer to any account |
+| GET | `/api/accounts/{no}/transactions?limit=10` | owner / admin | Recent activity |
+| GET | `/api/accounts/{no}/statement?from=YYYY-MM-DD&to=YYYY-MM-DD` | owner / admin | Statement |
+| GET | `/api/accounts/{no}/summary` | owner / admin | Monthly credit/debit summary |
+| GET | `/api/transactions/{referenceNo}` | sender / receiver / admin | Look up a transaction |
+| PATCH | `/api/accounts/{no}/status` | admin | Freeze / unfreeze / close |
+| GET | `/api/admin/stats` | admin | Totals for the admin console |
+| GET | `/api/admin/customers` | admin | All customers with their accounts |
+| GET | `/api/admin/transactions?limit=50` | admin | Latest transactions |
 
 ### Error responses
 
 | Status | When |
 |---|---|
 | 400 | Validation failed (field errors included) |
+| 401 | Missing, invalid or expired token; wrong username or password |
+| 403 | Account belongs to someone else, or admin-only endpoint |
 | 404 | Customer, account or transaction not found |
-| 409 | Duplicate email, or `referenceNo` reused for a different request |
+| 409 | Duplicate username or email, or `referenceNo` reused for a different request |
 | 422 | Insufficient funds, frozen/closed account, transfer to same account |
 
 ```json
@@ -262,8 +322,7 @@ curl -X POST http://localhost:8080/api/transfers \
 
 ## Possible extensions
 
-- JWT authentication with Spring Security (customers see only their own accounts)
+- Refresh tokens and logout-everywhere (token revocation list)
 - Daily withdrawal limits and transaction fees
 - Scheduled interest posting for savings accounts
-- Swagger / OpenAPI documentation
 - Testcontainers so tests start their own PostgreSQL automatically

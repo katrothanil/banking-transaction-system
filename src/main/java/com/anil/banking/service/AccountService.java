@@ -1,5 +1,6 @@
 package com.anil.banking.service;
 
+import com.anil.banking.dto.AccountHolderResponse;
 import com.anil.banking.dto.AccountResponse;
 import com.anil.banking.dto.CreateAccountRequest;
 import com.anil.banking.entity.Account;
@@ -42,6 +43,21 @@ public class AccountService {
         return accountRepository.findByCustomerIdOrderByIdAsc(customerId).stream()
                 .map(AccountResponse::from)
                 .toList();
+    }
+
+    /** Name of the account holder, partly masked ("Anil K."), shown before confirming a transfer. */
+    @Transactional(readOnly = true)
+    public AccountHolderResponse holder(String accountNumber) {
+        Account account = find(accountNumber);
+        return new AccountHolderResponse(accountNumber, mask(account.getCustomer().getFullName()));
+    }
+
+    static String mask(String fullName) {
+        String[] parts = fullName.trim().split("\\s+");
+        if (parts.length == 1) {
+            return parts[0];
+        }
+        return parts[0] + " " + parts[parts.length - 1].charAt(0) + ".";
     }
 
     /** Freeze, unfreeze or close. Locks the row so it cannot race with a transfer. */

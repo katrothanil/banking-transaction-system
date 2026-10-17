@@ -16,4 +16,14 @@ public interface TransactionRepository extends JpaRepository<BankTransaction, Lo
             WHERE t.referenceNo = :referenceNo
             """)
     Optional<BankTransaction> findByReferenceNo(@Param("referenceNo") String referenceNo);
+
+    @Query("""
+            SELECT t FROM BankTransaction t
+            LEFT JOIN FETCH t.fromAccount
+            LEFT JOIN FETCH t.toAccount
+            ORDER BY t.id DESC
+            """)
+    java.util.List<BankTransaction> findRecent(org.springframework.data.domain.Pageable pageable);
+
+    long countByCreatedAtGreaterThanEqual(java.time.LocalDateTime since);
 }

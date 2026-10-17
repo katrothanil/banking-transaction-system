@@ -25,6 +25,16 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
                                        @Param("from") LocalDateTime from,
                                        @Param("to") LocalDateTime to);
 
+    /** Latest entries first, for the dashboard's "recent activity" list. */
+    @Query("""
+            SELECT e FROM LedgerEntry e
+            JOIN FETCH e.transaction
+            WHERE e.account.id = :accountId
+            ORDER BY e.id DESC
+            """)
+    List<LedgerEntry> findRecent(@Param("accountId") Long accountId,
+                                 org.springframework.data.domain.Pageable pageable);
+
     /** Running balance just before a date = opening balance of a statement. */
     Optional<LedgerEntry> findFirstByAccountIdAndCreatedAtBeforeOrderByIdDesc(Long accountId, LocalDateTime before);
 

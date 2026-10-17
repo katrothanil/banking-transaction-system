@@ -7,6 +7,7 @@ import com.anil.banking.entity.EntryType;
 import com.anil.banking.entity.LedgerEntry;
 import com.anil.banking.exception.InvalidOperationException;
 import com.anil.banking.repository.LedgerEntryRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,12 +49,20 @@ public class StatementService {
         BigDecimal closing = entries.isEmpty() ? opening : entries.get(entries.size() - 1).getBalanceAfter();
 
         List<StatementResponse.Line> lines = entries.stream()
-                .map(e -> new StatementResponse.Line(e.getCreatedAt(), e.getTransaction().getReferenceNo(),
-                        e.getTransaction().getType(), e.getEntryType(), e.getAmount(), e.getBalanceAfter(),
-                        e.getTransaction().getDescription()))
+                .map(StatementService::toLine)
                 .toList();
 
         return new StatementResponse(accountNumber, from, to, opening, closing, credits, debits, lines);
+    }
+
+    /** Most recent ledger entries for an account, newest first. */
+    @Transactional(readOnly = true)
+    public List<StatementResponse.Line> recent(String accountNumber, int limit) {
+        Account account = accountService.find(accountNumber);
+        int size = Math.max(1, Math.min(limit, 50));
+        return ledgerEntryRepository.findRecent(account.getId(), PageRequest.of(0, size)).stream()
+                .map(StatementService::toLine)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +71,12 @@ public class StatementService {
         return ledgerEntryRepository.findMonthlySummary(account.getId()).stream()
                 .map(v -> new MonthlySummaryResponse(v.getMonth(), v.getTotalCredits(), v.getTotalDebits(), v.getEntryCount()))
                 .toList();
+    }
+
+    private static StatementResponse.Line toLine(LedgerEntry e) {
+        return new StatementResponse.Line(e.getCreatedAt(), e.getTransaction().getReferenceNo(),
+                e.getTransaction().getType(), e.getEntryType(), e.getAmount(), e.getBalanceAfter(),
+                e.getTransaction().getDescription());
     }
 
     private static BigDecimal sum(List<LedgerEntry> entries, EntryType type) {

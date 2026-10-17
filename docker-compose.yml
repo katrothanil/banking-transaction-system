@@ -7,7 +7,8 @@ services:
       POSTGRES_USER: banking
       POSTGRES_PASSWORD: banking
     ports:
-      - "5432:5432"
+      # Host port 5433 avoids clashing with a PostgreSQL installed directly on the PC
+      - "5433:5432"
     volumes:
       - banking-data:/var/lib/postgresql/data
       # Creates the separate banking_test database used by the tests
@@ -30,6 +31,22 @@ services:
       DB_PASSWORD: banking
     ports:
       - "8080:8080"
+
+  # Database UI in the browser: http://localhost:5050 (login: admin@banking.com / admin)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: banking-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@banking.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      # Pre-registers the banking database so it appears in pgAdmin automatically
+      - ./docker/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      - db
 
 volumes:
   banking-data:
