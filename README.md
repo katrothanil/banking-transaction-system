@@ -180,6 +180,20 @@ docker compose up -d db
 mvn test
 ```
 
+No Java or Maven installed? Run the tests inside Docker instead (from the project folder):
+
+```bash
+docker run --rm --network banking-transaction-system_default \
+  -v "$PWD:/app" -v banking-m2:/root/.m2 -w /app \
+  -e TEST_DB_URL=jdbc:postgresql://db:5432/banking_test \
+  maven:3.9-eclipse-temurin-17 mvn test
+```
+
+```text
+Tests run: 17, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
 > If you created the database container before `docker/init-test-db.sql` existed, run
 > `docker exec -it banking-db psql -U banking -c "CREATE DATABASE banking_test;"` once.
 
